@@ -38,17 +38,18 @@ class Game {
         this.gameCanvas = document.getElementById('gameCanvas');
         this.gameCtx = this.gameCanvas.getContext('2d');
 
-        this.shapes = [];
-        this.selectedShape = null;
-        this.selectedShapeObj = null;
-        this.draggedShape = null;
-        this.isDragging = false;
-        this.dragOffset = { x: 0, y: 0 };
-        this.mouseDownPos = { x: 0, y: 0 };
+        this.shapes = []; // 存储所有已创建的形状对象
+        this.selectedShape = null; // 当前选中的形状类型（circle/square/triangle）
+        this.activeShape = null; // 当前激活的形状对象实例
+        this.draggedShape = null; // 当前正在拖拽的形状对象
+        this.isDragging = false; // 是否正在拖拽状态
+        this.dragOffset = { x: 0, y: 0 }; // 拖拽时鼠标相对于形状中心的偏移量
+        this.mouseDownPos = { x: 0, y: 0 }; // 鼠标按下时的位置坐标
+        
+        // 性能优化：缓存消融区域
+        this.ablationCache = null;
 
         this.setupEventListeners();
-        // 清除所有按钮的默认选中状态
-        document.querySelectorAll('.shape-button').forEach(b => b.classList.remove('selected'));
         this.updateDisplay();
     }
 
@@ -61,31 +62,35 @@ class Game {
                 e.preventDefault();
                 this.isDragging = false;
                 this.draggedShape = null;
-                this.selectedShapeObj = null;
+                this.activeShape = null;
                 this.updateDisplay();
                 return;
             }
             
             const rect = this.gameCanvas.getBoundingClientRect();
-            const x = e.clientX - rect.left;
+            const x = e.clientX - rect.left;  // 相对位置
             const y = e.clientY - rect.top;
             
             this.mouseDownPos.x = x;
             this.mouseDownPos.y = y;
 
-            const clickedShape = this.getShapeAt(x, y);
-            if (clickedShape) {
-                this.selectedShapeObj = clickedShape;
-                this.draggedShape = clickedShape;
-                this.dragOffset.x = x - clickedShape.x;
-                this.dragOffset.y = y - clickedShape.y;
-            } else if (this.selectedShape) {
-                this.selectedShapeObj = null;
+            // 如果已选中形状类型，创建新形状
+            if (this.selectedShape) {
+                this.activeShape = null;
                 this.addShape(x, y);
                 this.selectedShape = null;
                 document.querySelectorAll('.shape-button').forEach(b => b.classList.remove('selected'));
             } else {
-                this.selectedShapeObj = null;
+                // 否则尝试选中已有形状
+                const clickedShape = this.getShapeAt(x, y);
+                if (clickedShape) {
+                    this.activeShape = clickedShape;
+                    this.draggedShape = clickedShape;
+                    this.dragOffset.x = x - clickedShape.x;
+                    this.dragOffset.y = y - clickedShape.y;
+                } else {
+                    this.activeShape = null;
+                }
             }
             this.updateDisplay();
         });
@@ -118,31 +123,44 @@ class Game {
                     this.draggedShape.x = Math.max(halfSize, Math.min(400 - halfSize, newX));
                     this.draggedShape.y = Math.max(halfSize, Math.min(400 - halfSize, newY));
                     
-                    this.updateDisplay();
+                    // 拖拽时只更新形状位置，不重新计算消融区域
+                    this.updateShapesOnly();
                 }
             }
         });
 
         this.gameCanvas.addEventListener('mouseup', () => {
+            if (this.isDragging) {
+                this.ablationCache = null;
+                this.updateDisplay(); // 拖拽结束后才重新计算消融区域
+            }
             this.isDragging = false;
             this.draggedShape = null;
         });
         
         this.gameCanvas.addEventListener('mouseleave', () => {
-            this.isDragging = false;
-            this.draggedShape = null;
-            this.selectedShapeObj = null;
-            this.updateDisplay();
+            // 只有在拖动状态下才取消选中
+            if (this.isDragging) {
+                this.isDragging = false;
+                this.draggedShape = null;
+                this.ablationCache = null;
+                this.updateDisplay();
+            } else {
+                // 非拖动状态下只重置拖动相关状态
+                this.isDragging = false;
+                this.draggedShape = null;
+            }
         });
         
         this.gameCanvas.addEventListener('wheel', (e) => {
-            if (this.selectedShapeObj) {
+            if (this.activeShape) {
                 e.preventDefault();
                 const scaleValues = [0.5, 0.75, 1, 1.5, 2];
-                const currentIndex = scaleValues.indexOf(this.selectedShapeObj.scale);
+                const currentIndex = scaleValues.indexOf(this.activeShape.scale);
                 const direction = e.deltaY > 0 ? -1 : 1;
                 const newIndex = Math.max(0, Math.min(scaleValues.length - 1, currentIndex + direction));
-                this.selectedShapeObj.scale = scaleValues[newIndex];
+                this.activeShape.scale = scaleValues[newIndex];
+                this.ablationCache = null;
                 this.updateDisplay();
             }
         });
@@ -152,6 +170,9 @@ class Game {
                 document.querySelectorAll('.shape-button').forEach(b => b.classList.remove('selected'));
                 e.target.classList.add('selected');
                 this.selectedShape = e.target.dataset.shape;
+                this.activeShape = null; // 取消当前激活的形状
+
+                this.updateDisplay();
             });
         });
     }
@@ -159,7 +180,11 @@ class Game {
     getShapeAt(x, y) {
         for (let i = this.shapes.length - 1; i >= 0; i--) {
             if (this.shapes[i].containsPoint(x, y)) {
-                return this.shapes[i];
+                // 找到形状后，将其从数组中移除并添加到末尾，使其优先级最高
+                const shape = this.shapes[i];
+                this.shapes.splice(i, 1);
+                this.shapes.push(shape);
+                return shape;
             }
         }
         return null;
@@ -172,7 +197,8 @@ class Game {
         
         const shape = new Shape(this.selectedShape, boundedX, boundedY, 60);
         this.shapes.push(shape);
-        this.selectedShapeObj = shape;
+        this.activeShape = shape;
+        this.ablationCache = null;
         this.updateDisplay();
     }
 
@@ -253,21 +279,44 @@ class Game {
 
 
     updateDisplay() {
-        // 绘制游戏区域的形状
-        this.drawShapes(this.gameCtx, this.shapes);
+        // 只有在需要时才重新计算消融区域
+        if (!this.ablationCache) {
+            this.ablationCache = this.calculateAblationRegions();
+        }
+        
+        // 清空画布
+        this.gameCtx.clearRect(0, 0, 400, 400);
+        
+        // 绘制缓存的消融结果
+        if (this.ablationCache) {
+            this.gameCtx.putImageData(this.ablationCache, 0, 0);
+        }
 
-        // 绘制高精度消融结果
-        const ablationData = this.calculateAblationRegions();
-        this.gameCtx.putImageData(ablationData, 0, 0);
-
-        // 重新绘制形状轮廓（在消融结果之上）
+        // 绘制形状轮廓
+        this.drawShapeOutlines();
+    }
+    
+    updateShapesOnly() {
+        // 快速更新：只重绘形状，不重新计算消融区域
+        this.gameCtx.clearRect(0, 0, 400, 400);
+        
+        // 绘制缓存的消融结果
+        if (this.ablationCache) {
+            this.gameCtx.putImageData(this.ablationCache, 0, 0);
+        }
+        
+        // 绘制形状轮廓
+        this.drawShapeOutlines();
+    }
+    
+    drawShapeOutlines() {
         this.shapes.forEach((shape, index) => {
             const shapeColors = {
                 'circle': '#4ECDC4',    // 青色
                 'square': '#45B7D1',    // 蓝色
                 'triangle': '#96CEB4'   // 绿色
             };
-            const isSelected = shape === this.selectedShapeObj;
+            const isSelected = shape === this.activeShape;
 
             this.gameCtx.strokeStyle = isSelected ? '#FF0000' : shapeColors[shape.type];
             this.gameCtx.lineWidth = isSelected ? 2.5 : 2;
@@ -296,6 +345,7 @@ class Game {
 
 function clearShapes() {
     game.shapes = [];
+    game.ablationCache = null;
     game.updateDisplay();
 }
 
