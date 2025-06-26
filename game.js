@@ -5,29 +5,38 @@ class Shape {
         this.y = y;
         this.size = size;
         this.scale = 1;
+        this.rotation = 0;
     }
 
     containsPoint(px, py) {
+        const scaledSize = this.size * this.scale;
+
+        // 将点转换到形状的本地坐标系
+        const cos = Math.cos(-this.rotation * Math.PI / 180);
+        const sin = Math.sin(-this.rotation * Math.PI / 180);
         const dx = px - this.x;
         const dy = py - this.y;
-        const scaledSize = this.size * this.scale;
+        const localX = dx * cos - dy * sin;
+        const localY = dx * sin + dy * cos;
 
         switch (this.type) {
             case 'circle':
-                return dx * dx + dy * dy <= (scaledSize / 2) * (scaledSize / 2);
+                return localX * localX + localY * localY <= (scaledSize / 2) * (scaledSize / 2);
             case 'square':
-                return Math.abs(dx) <= scaledSize / 2 && Math.abs(dy) <= scaledSize / 2;
+                return Math.abs(localX) <= scaledSize / 2 && Math.abs(localY) <= scaledSize / 2;
             case 'triangle':
-                const topY = this.y - scaledSize / 2;
-                const bottomY = this.y + scaledSize / 2;
-
-                if (py < topY || py > bottomY) return false;
-
-                const ratio = (py - topY) / (bottomY - topY);
-                const currentLeft = this.x - (scaledSize / 2) * ratio;
-                const currentRight = this.x + (scaledSize / 2) * ratio;
-
-                return px >= currentLeft && px <= currentRight;
+                const s = scaledSize;
+                const topY = -Math.sqrt(3) / 3 * s;
+                const bottomY = Math.sqrt(3) / 6 * s;
+                const height = bottomY - topY;
+                
+                if (localY < topY || localY > bottomY) return false;
+                
+                // 从顶点到底边，宽度线性增加
+                const distFromTop = localY - topY;
+                const ratio = distFromTop / height;
+                const currentWidth = ratio * s; // 底边宽度为s
+                return Math.abs(localX) <= currentWidth / 2;
         }
         return false;
     }
@@ -45,7 +54,11 @@ class Game {
         this.isDragging = false; // 是否正在拖拽状态
         this.dragOffset = { x: 0, y: 0 }; // 拖拽时鼠标相对于形状中心的偏移量
         this.mouseDownPos = { x: 0, y: 0 }; // 鼠标按下时的位置坐标
-        
+
+        // 三连击删除功能
+        this.clickCount = 0;
+        this.lastClickTime = 0;
+
         // 性能优化：缓存消融区域
         this.ablationCache = null;
 
@@ -57,20 +70,21 @@ class Game {
 
     setupEventListeners() {
         this.gameCanvas.addEventListener('mousedown', (e) => {
-            // 右键点击取消选中
+            // 右键点击旋转当前选中的形状
             if (e.button === 2) {
                 e.preventDefault();
-                this.isDragging = false;
-                this.draggedShape = null;
-                this.activeShape = null;
-                this.updateDisplay();
+                if (this.activeShape) {
+                    this.rotateShape(this.activeShape);
+                    this.ablationCache = null;
+                    this.updateDisplay();
+                }
                 return;
             }
-            
+
             const rect = this.gameCanvas.getBoundingClientRect();
             const x = e.clientX - rect.left;  // 相对位置
             const y = e.clientY - rect.top;
-            
+
             this.mouseDownPos.x = x;
             this.mouseDownPos.y = y;
 
@@ -84,17 +98,39 @@ class Game {
                 // 否则尝试选中已有形状
                 const clickedShape = this.getShapeAt(x, y);
                 if (clickedShape) {
+                    // 三连击删除检测
+                    const currentTime = Date.now();
+                    if (clickedShape === this.activeShape && currentTime - this.lastClickTime < 200) {
+                        this.clickCount++;
+                        if (this.clickCount >= 3) {
+                            // 删除形状
+                            const index = this.shapes.indexOf(clickedShape);
+                            if (index > -1) {
+                                this.shapes.splice(index, 1);
+                                this.activeShape = null;
+                                this.ablationCache = null;
+                            }
+                            this.clickCount = 0;
+                            this.updateDisplay();
+                            return;
+                        }
+                    } else {
+                        this.clickCount = 1;
+                    }
+                    this.lastClickTime = currentTime;
+                    
                     this.activeShape = clickedShape;
                     this.draggedShape = clickedShape;
                     this.dragOffset.x = x - clickedShape.x;
                     this.dragOffset.y = y - clickedShape.y;
                 } else {
                     this.activeShape = null;
+                    this.clickCount = 0;
                 }
             }
             this.updateDisplay();
         });
-        
+
         // 禁用右键菜单
         this.gameCanvas.addEventListener('contextmenu', (e) => {
             e.preventDefault();
@@ -105,24 +141,32 @@ class Game {
                 const rect = this.gameCanvas.getBoundingClientRect();
                 const x = e.clientX - rect.left;
                 const y = e.clientY - rect.top;
-                
+
                 const dx = x - this.mouseDownPos.x;
                 const dy = y - this.mouseDownPos.y;
-                
+
                 // 只有移动距离超过5像素才开始拖拽
                 if (!this.isDragging && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) {
                     this.isDragging = true;
                 }
-                
+
                 if (this.isDragging) {
                     const newX = x - this.dragOffset.x;
                     const newY = y - this.dragOffset.y;
-                    
+
                     // 边界检测
-                    const halfSize = (this.draggedShape.size * this.draggedShape.scale) / 2;
-                    this.draggedShape.x = Math.max(halfSize, Math.min(400 - halfSize, newX));
-                    this.draggedShape.y = Math.max(halfSize, Math.min(400 - halfSize, newY));
-                    
+                    const size = this.draggedShape.size * this.draggedShape.scale;
+                    let radius;
+                    if (this.draggedShape.type === 'triangle') {
+                        radius = size / Math.sqrt(3);
+                    } else if (this.draggedShape.type === 'square') {
+                        radius = size / Math.sqrt(2);
+                    } else {
+                        radius = size / 2;
+                    }
+                    this.draggedShape.x = Math.max(radius, Math.min(400 - radius, newX));
+                    this.draggedShape.y = Math.max(radius, Math.min(400 - radius, newY));
+
                     // 拖拽时只更新形状位置，不重新计算消融区域
                     this.updateShapesOnly();
                 }
@@ -137,7 +181,7 @@ class Game {
             this.isDragging = false;
             this.draggedShape = null;
         });
-        
+
         this.gameCanvas.addEventListener('mouseleave', () => {
             // 只有在拖动状态下才取消选中
             if (this.isDragging) {
@@ -151,7 +195,7 @@ class Game {
                 this.draggedShape = null;
             }
         });
-        
+
         this.gameCanvas.addEventListener('wheel', (e) => {
             if (this.activeShape) {
                 e.preventDefault();
@@ -159,9 +203,30 @@ class Game {
                 const currentIndex = scaleValues.indexOf(this.activeShape.scale);
                 const direction = e.deltaY > 0 ? -1 : 1;
                 const newIndex = Math.max(0, Math.min(scaleValues.length - 1, currentIndex + direction));
-                this.activeShape.scale = scaleValues[newIndex];
-                this.ablationCache = null;
-                this.updateDisplay();
+                const newScale = scaleValues[newIndex];
+                
+                // 检查新缩放是否会导致形状溢出边界
+                const newSize = this.activeShape.size * newScale;
+                let canScale = false;
+                
+                let radius;
+                if (this.activeShape.type === 'triangle') {
+                    radius = newSize / Math.sqrt(3);
+                } else if (this.activeShape.type === 'square') {
+                    radius = newSize / Math.sqrt(2);
+                } else {
+                    radius = newSize / 2;
+                }
+                canScale = this.activeShape.x - radius >= 0 && 
+                          this.activeShape.x + radius <= 400 && 
+                          this.activeShape.y - radius >= 0 && 
+                          this.activeShape.y + radius <= 400;
+                
+                if (canScale) {
+                    this.activeShape.scale = newScale;
+                    this.ablationCache = null;
+                    this.updateDisplay();
+                }
             }
         });
 
@@ -190,10 +255,32 @@ class Game {
         return null;
     }
 
+    rotateShape(shape) {
+        switch (shape.type) {
+            case 'circle':
+                break;
+            case 'square':
+                shape.rotation = (shape.rotation + 45) % 360;
+                break;
+            case 'triangle':
+                shape.rotation = (shape.rotation + 60) % 360;
+                break;
+        }
+    }
+
     addShape(x, y) {
-        const halfSize = 30; // size/2 = 60/2
-        const boundedX = Math.max(halfSize, Math.min(400 - halfSize, x));
-        const boundedY = Math.max(halfSize, Math.min(400 - halfSize, y));
+        let boundedX, boundedY;
+        
+        let radius;
+        if (this.selectedShape === 'triangle') {
+            radius = 60 / Math.sqrt(3);
+        } else if (this.selectedShape === 'square') {
+            radius = 60 / Math.sqrt(2);
+        } else {
+            radius = 30;
+        }
+        boundedX = Math.max(radius, Math.min(400 - radius, x));
+        boundedY = Math.max(radius, Math.min(400 - radius, y));
         
         const shape = new Shape(this.selectedShape, boundedX, boundedY, 60);
         this.shapes.push(shape);
@@ -256,23 +343,30 @@ class Game {
             ctx.fillStyle = color + '30';
 
             const scaledSize = shape.size * shape.scale;
+
+            ctx.save();
+            ctx.translate(shape.x, shape.y);
+            ctx.rotate(shape.rotation * Math.PI / 180);
+
             ctx.beginPath();
             switch (shape.type) {
                 case 'circle':
-                    ctx.arc(shape.x, shape.y, scaledSize / 2, 0, Math.PI * 2);
+                    ctx.arc(0, 0, scaledSize / 2, 0, Math.PI * 2);
                     break;
                 case 'square':
-                    ctx.rect(shape.x - scaledSize / 2, shape.y - scaledSize / 2, scaledSize, scaledSize);
+                    ctx.rect(-scaledSize / 2, -scaledSize / 2, scaledSize, scaledSize);
                     break;
                 case 'triangle':
-                    ctx.moveTo(shape.x, shape.y - scaledSize / 2);
-                    ctx.lineTo(shape.x - scaledSize / 2, shape.y + scaledSize / 2);
-                    ctx.lineTo(shape.x + scaledSize / 2, shape.y + scaledSize / 2);
+                    const s = scaledSize;
+                    ctx.moveTo(0, -Math.sqrt(3) / 3 * s);
+                    ctx.lineTo(-0.5 * s, Math.sqrt(3) / 6 * s);
+                    ctx.lineTo(0.5 * s, Math.sqrt(3) / 6 * s);
                     ctx.closePath();
                     break;
             }
             ctx.fill();
             ctx.stroke();
+            ctx.restore();
         });
     }
 
@@ -283,10 +377,10 @@ class Game {
         if (!this.ablationCache) {
             this.ablationCache = this.calculateAblationRegions();
         }
-        
+
         // 清空画布
         this.gameCtx.clearRect(0, 0, 400, 400);
-        
+
         // 绘制缓存的消融结果
         if (this.ablationCache) {
             this.gameCtx.putImageData(this.ablationCache, 0, 0);
@@ -295,20 +389,20 @@ class Game {
         // 绘制形状轮廓
         this.drawShapeOutlines();
     }
-    
+
     updateShapesOnly() {
         // 快速更新：只重绘形状，不重新计算消融区域
         this.gameCtx.clearRect(0, 0, 400, 400);
-        
+
         // 绘制缓存的消融结果
         if (this.ablationCache) {
             this.gameCtx.putImageData(this.ablationCache, 0, 0);
         }
-        
+
         // 绘制形状轮廓
         this.drawShapeOutlines();
     }
-    
+
     drawShapeOutlines() {
         this.shapes.forEach((shape, index) => {
             const shapeColors = {
@@ -323,22 +417,29 @@ class Game {
             this.gameCtx.fillStyle = 'transparent';
 
             const scaledSize = shape.size * shape.scale;
+
+            this.gameCtx.save();
+            this.gameCtx.translate(shape.x, shape.y);
+            this.gameCtx.rotate(shape.rotation * Math.PI / 180);
+
             this.gameCtx.beginPath();
             switch (shape.type) {
                 case 'circle':
-                    this.gameCtx.arc(shape.x, shape.y, scaledSize / 2, 0, Math.PI * 2);
+                    this.gameCtx.arc(0, 0, scaledSize / 2, 0, Math.PI * 2);
                     break;
                 case 'square':
-                    this.gameCtx.rect(shape.x - scaledSize / 2, shape.y - scaledSize / 2, scaledSize, scaledSize);
+                    this.gameCtx.rect(-scaledSize / 2, -scaledSize / 2, scaledSize, scaledSize);
                     break;
                 case 'triangle':
-                    this.gameCtx.moveTo(shape.x, shape.y - scaledSize / 2);
-                    this.gameCtx.lineTo(shape.x - scaledSize / 2, shape.y + scaledSize / 2);
-                    this.gameCtx.lineTo(shape.x + scaledSize / 2, shape.y + scaledSize / 2);
+                    const s = scaledSize;
+                    this.gameCtx.moveTo(0, -Math.sqrt(3) / 3 * s);
+                    this.gameCtx.lineTo(-0.5 * s, Math.sqrt(3) / 6 * s);
+                    this.gameCtx.lineTo(0.5 * s, Math.sqrt(3) / 6 * s);
                     this.gameCtx.closePath();
                     break;
             }
             this.gameCtx.stroke();
+            this.gameCtx.restore();
         });
     }
 }
