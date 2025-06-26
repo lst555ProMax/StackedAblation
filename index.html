@@ -128,16 +128,51 @@
             50% { transform: scale(1.05); }
             100% { transform: scale(1); }
         }
+        .mode-selector {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 10px;
+            z-index: 1000;
+        }
+        .mode-button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 25px;
+            font-size: 1.1em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            backdrop-filter: blur(10px);
+        }
+        .mode-button.active {
+            background: #4CAF50;
+            box-shadow: 0 4px 12px rgba(76, 175, 80, 0.4);
+        }
+        .mode-button:hover {
+            transform: translateY(-2px);
+        }
+        .hidden {
+            display: none;
+        }
     </style>
 </head>
 <body>
-    <div class="game-container">
+    <div class="mode-selector">
+        <button class="mode-button active" onclick="switchMode('explore')">🔍 探索模式</button>
+        <button class="mode-button" onclick="switchMode('challenge')">🎯 闯关模式</button>
+    </div>
+    
+    <div id="explore-mode" class="game-container">
         <h1 class="title">🎯 Stacked Ablation Challenge</h1>
         
         <div class="game-area">
             <div class="canvas-container">
                 <div class="canvas-label">🎮 Stacked Ablation Canvas</div>
-                <canvas id="gameCanvas" width="400" height="400"></canvas>
+                <canvas id="gameCanvas" width="600" height="600"></canvas>
             </div>
             
             <div class="controls">
@@ -163,6 +198,63 @@
         </div>
     </div>
 
+    <div id="challenge-mode" class="game-container hidden">
+        <h1 class="title">🎯 Stacked Ablation Challenge - 闯关模式</h1>
+        
+        <div class="game-area">
+            <div class="canvas-container">
+                <div class="canvas-label">🎮 Stacked Ablation Canvas</div>
+                <canvas id="challengeCanvas" width="600" height="600"></canvas>
+            </div>
+            
+            <div class="controls">
+                <div class="shapes-panel">
+                    <h4>Select Shape:</h4>
+                    <button class="shape-button" data-shape="circle">🔵 Circle</button>
+                    <button class="shape-button" data-shape="square">🟦 Square</button>
+                    <button class="shape-button" data-shape="triangle">🔺 Triangle</button>
+                </div>
+                
+                <div>
+                    <button class="action-button clear-button" onclick="clearChallengeShapes()">🗑️ Clear All</button>
+                </div>
+                
+                <div class="info-panel">
+                    <h4>How it works:</h4>
+                    <p>• Click to place shapes</p>
+                    <p>• Odd overlaps = White (visible)</p>
+                    <p>• Even overlaps = Transparent</p>
+                    <p>• Experiment with different combinations!</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function switchMode(mode) {
+            const exploreMode = document.getElementById('explore-mode');
+            const challengeMode = document.getElementById('challenge-mode');
+            const buttons = document.querySelectorAll('.mode-button');
+            
+            buttons.forEach(btn => btn.classList.remove('active'));
+            
+            if (mode === 'explore') {
+                exploreMode.classList.remove('hidden');
+                challengeMode.classList.add('hidden');
+                buttons[0].classList.add('active');
+            } else {
+                exploreMode.classList.add('hidden');
+                challengeMode.classList.remove('hidden');
+                buttons[1].classList.add('active');
+            }
+        }
+        
+        function clearChallengeShapes() {
+            if (window.challengeGame) {
+                window.challengeGame.clearShapes();
+            }
+        }
+    </script>
     <script src="game.js"></script>
 </body>
 </html>
