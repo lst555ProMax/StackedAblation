@@ -61,7 +61,29 @@
    - **删除**：对同一形状快速三连击
 4. **观察效果**：实时查看形状重叠产生的消融效果
 
-## 文件结构
+## 项目结构
+
+```
+js/
+├── core/                   # 核心业务逻辑
+│   ├── Config.js          # 配置常量管理
+│   ├── Game.js            # 游戏主控制类
+│   └── Shape.js           # 形状基础类
+│
+├── managers/              # 管理器类
+│   ├── EventHandler.js   # 事件处理管理器
+│   ├── GameManager.js     # 游戏管理器
+│   └── Renderer.js        # 渲染管理器
+│
+├── utils/                 # 工具类
+│   ├── AblationCalculator.js  # 消融算法计算器
+│   └── GeometryUtils.js   # 几何计算工具
+│
+├── ui/                    # 用户界面控制
+│   └── UIController.js    # UI控制器
+│
+└── main.js               # 主入口文件
+```
 
 - `index.html` - 主页面和UI界面
 - `game.js` - 核心游戏逻辑和渲染引擎

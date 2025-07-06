@@ -1,0 +1,33 @@
+Date : 2025-07-06 14:48:26
+Directory : f:\My_application\Stacked ablation\js
+Total : 9 files,  744 codes, 68 comments, 145 blanks, all 957 lines
+
+Languages
++------------+------------+------------+------------+------------+------------+
+| language   | files      | code       | comment    | blank      | total      |
++------------+------------+------------+------------+------------+------------+
+| JavaScript |          9 |        744 |         68 |        145 |        957 |
++------------+------------+------------+------------+------------+------------+
+
+Directories
++-------------------------------------------------------------+------------+------------+------------+------------+------------+
+| path                                                        | files      | code       | comment    | blank      | total      |
++-------------------------------------------------------------+------------+------------+------------+------------+------------+
+| .                                                           |          9 |        744 |         68 |        145 |        957 |
++-------------------------------------------------------------+------------+------------+------------+------------+------------+
+
+Files
++-------------------------------------------------------------+------------+------------+------------+------------+------------+
+| filename                                                    | language   | code       | comment    | blank      | total      |
++-------------------------------------------------------------+------------+------------+------------+------------+------------+
+| f:\My_application\Stacked ablation\js\AblationCalculator.js | JavaScript |         98 |          0 |         20 |        118 |
+| f:\My_application\Stacked ablation\js\Config.js             | JavaScript |         36 |         11 |          8 |         55 |
+| f:\My_application\Stacked ablation\js\EventHandler.js       | JavaScript |        200 |          0 |         36 |        236 |
+| f:\My_application\Stacked ablation\js\Game.js               | JavaScript |        195 |          0 |         37 |        232 |
+| f:\My_application\Stacked ablation\js\GeometryUtils.js      | JavaScript |         35 |         47 |          7 |         89 |
+| f:\My_application\Stacked ablation\js\Renderer.js           | JavaScript |         66 |          0 |         13 |         79 |
+| f:\My_application\Stacked ablation\js\Shape.js              | JavaScript |         41 |          0 |          6 |         47 |
+| f:\My_application\Stacked ablation\js\main.js               | JavaScript |         31 |          5 |          7 |         43 |
+| f:\My_application\Stacked ablation\js\ui.js                 | JavaScript |         42 |          5 |         11 |         58 |
+| Total                                                       |            |        744 |         68 |        145 |        957 |
++-------------------------------------------------------------+------------+------------+------------+------------+------------+
