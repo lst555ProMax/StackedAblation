@@ -5,6 +5,7 @@ Thumbs.db
 # 编辑器文件
 .vscode/
 .idea/
+.VSCodeCounter/
 *.swp
 *.swo
 
